@@ -4,13 +4,15 @@ from pydantic import BaseModel
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
-class AlertOut(BaseModel):
+class AlertRowOut(BaseModel):
     id: int
-    project: str
+    project_id: int
     title: str
-    severity: Literal["low", "medium", "high"]
+    severity: str
     created_at: str
-    events_count: int
+
+    class Config:
+        from_attributes = True
 
 
 class Base(DeclarativeBase):
@@ -25,4 +27,3 @@ class Alert(Base):
     title: Mapped[str]
     severity: Mapped[str]
     created_at: Mapped[str]
-

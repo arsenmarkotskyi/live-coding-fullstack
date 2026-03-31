@@ -20,8 +20,8 @@ def DB():
         _DB.row_factory = sqlite3.Row
     return _DB
 
-# 1.
-@app.get("/alerts-first")
+# 1. simplest raw SQL (no joins, no filters)
+@app.get("/alerts")
 def list_alerts_sql():
     cur = DB().cursor()
     rows = cur.execute(
