@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sqlite3
 from typing import List
 
@@ -10,6 +11,8 @@ from dependencies import get_db
 from models import AlertRowOut, Alert
 
 app = FastAPI(title="live coding test API")
+
+PORT = int(os.environ["PORT"])
 
 _DB = None
 

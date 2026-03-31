@@ -26,6 +26,14 @@
     </header>
 
     <main class="main">
+      <div class="summary">
+        <div class="summaryItem">
+          Total alerts: <b>{{ filtered.length }}</b>
+        </div>
+        <div class="summaryItem">
+          Total events: <b>{{ totalEvents }}</b>
+        </div>
+      </div>
       <div class="grid">
         <article v-for="alert in filtered" :key="alert.id" class="card">
           <div class="cardTop">
@@ -92,6 +100,10 @@ const filtered = computed(() => {
     return !(severity.value && alert.severity !== severity.value);
 
   });
+});
+
+const totalEvents = computed(() => {
+  return filtered.value.reduce((acc, alert) => acc + alert.events_count, "");
 });
 </script>
 
@@ -182,6 +194,22 @@ code {
 
 .main {
   margin-top: 16px;
+}
+
+.summary {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 14px 0;
+}
+
+.summaryItem {
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  font-size: 13px;
 }
 
 .grid {
