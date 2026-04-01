@@ -13,4 +13,3 @@ dist/
 
 # SQLite
 *.sqlite
-*.sqlite3
