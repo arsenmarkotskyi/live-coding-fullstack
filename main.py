@@ -22,6 +22,13 @@ app.add_middleware(
 )
 
 
+class ProjectsController:
+    @classmethod
+    def list_projects(cls, db: Session) -> List[ProjectRowOut]:
+        rows = db.query(Project).order_by(Project.name.asc()).all()
+        return [ProjectRowOut.model_validate(p) for p in rows]
+
+
 class AlertsController:
     _FILTERABLE: dict[str, Any] = {
         "severity": Alert.severity,
@@ -33,23 +40,18 @@ class AlertsController:
     @classmethod
     async def get_alerts(cls, db: Session, filters: dict[str, Any] | None = None) -> List[AlertRowOut]:
         filters = filters or {}
-        event_counts_subquery = (
-            db.query(
-                AlertEvent.alert_id,
-                func.count(AlertEvent.id).label("events_count"),
-            )
-            .group_by(AlertEvent.alert_id)
-            .subquery()
-        )
         alerts_query = (
-            db.query(Alert, Project.name, func.coalesce(event_counts_subquery.c.events_count, 0))
+            db.query(Alert, Project.name, func.count(AlertEvent.id))
             .join(Project, Alert.project_id == Project.id)
-            .outerjoin(event_counts_subquery, Alert.id == event_counts_subquery.c.alert_id)
+            .outerjoin(AlertEvent, Alert.id == AlertEvent.alert_id)
         )
         for field, column in cls._FILTERABLE.items():
             if (value := filters.get(field)) is not None:
                 alerts_query = alerts_query.filter(column == value)
-        alerts_query = alerts_query.order_by(Alert.created_at.desc(), Alert.id.desc())
+        alerts_query = alerts_query.group_by(Alert, Project.name).order_by(
+            Alert.created_at.desc(),
+            Alert.id.desc(),
+        )
         return [
             AlertRowOut(
                 id=alert.id,
@@ -66,8 +68,7 @@ class AlertsController:
 
 @app.get("/projects", response_model=List[ProjectRowOut])
 def list_projects(db: Session = Depends(get_db)):
-    rows = db.query(Project).order_by(Project.name.asc()).all()
-    return [ProjectRowOut.model_validate(p) for p in rows]
+    return ProjectsController.list_projects(db)
 
 
 @app.get("/alerts", response_model=List[AlertRowOut])
