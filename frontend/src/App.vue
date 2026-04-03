@@ -3,19 +3,19 @@
     <header class="header">
       <div>
         <h1 class="title">Alerts</h1>
-        <p class="subtitle">Mocked data</p>
+        <p class="subtitle">Data from API</p>
       </div>
       <div class="filters">
         <label class="label">
           Project
-          <select v-model="project" class="select">
+          <select v-model="projectName" class="select">
             <option value="">All</option>
-            <option v-for="project in projects" :key="project" :value="project">{{ project }}</option>
+            <option v-for="p in projectsList" :key="p.id" :value="p.name">{{ p.name }}</option>
           </select>
         </label>
         <label class="label">
           Severity
-          <select v-model="severity" class="select">
+          <select v-model="severityFilter" class="select">
             <option value="">All</option>
             <option value="low">low</option>
             <option value="medium">medium</option>
@@ -26,85 +26,110 @@
     </header>
 
     <main class="main">
-      <div class="summary">
-        <div class="summaryItem">
-          Total alerts: <b>{{ filtered.length }}</b>
-        </div>
-        <div class="summaryItem">
-          Total events: <b>{{ totalEvents }}</b>
-        </div>
-      </div>
-      <div class="grid">
-        <article v-for="alert in filtered" :key="alert.id" class="card">
-          <div class="cardTop">
-            <span class="pill">{{ alert.project }}</span>
-            <span class="sev" :data-sev="alert.severity">{{ alert.severity }}</span>
+      <p v-if="loadError" class="error">{{ loadError }}</p>
+      <p v-else-if="loading" class="loading">Loading…</p>
+      <div v-else class="content">
+        <div class="summary">
+          <div class="summaryItem">
+            Total alerts: <b>{{ alerts.length }}</b>
           </div>
-          <h3 class="cardTitle">{{ alert.title }}</h3>
-          <div class="meta">
-            <span>events: <b>{{ alert.events_count }}</b></span>
-            <span class="dot">•</span>
-            <span class="muted">{{ alert.created_at }}</span>
+          <div class="summaryItem">
+            Total events: <b>{{ totalEvents }}</b>
           </div>
-        </article>
+        </div>
+        <div class="grid">
+          <article v-for="alert in alerts" :key="alert.id" class="card">
+            <div class="cardTop">
+              <span class="pill">{{ alert.project_name }}</span>
+              <span class="sev" :data-sev="alert.severity">{{ alert.severity }}</span>
+            </div>
+            <h3 class="cardTitle">{{ alert.title }}</h3>
+            <div class="meta">
+              <span>events: <b>{{ eventCount(alert) }}</b></span>
+              <span class="dot">•</span>
+              <span class="muted">{{ alert.created_at }}</span>
+            </div>
+          </article>
+        </div>
       </div>
     </main>
   </div>
 </template>
 
 <script setup>
-import { computed, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 
-const alerts = ref([
-  {
-    id: 1,
-    project: "core",
-    title: "test alert 1",
-    severity: "medium",
-    created_at: "2026-03-31 12:00:00",
-    events_count: 1
-  },
-  {
-    id: 2,
-    project: "core",
-    title: "test alert 2",
-    severity: "high",
-    created_at: "2026-03-31 12:10:00",
-    events_count: 0
-  },
-  {
-    id: 3,
-    project: "payments",
-    title: "test alert 3",
-    severity: "high",
-    created_at: "2026-03-31 12:20:00",
-    events_count: 2
-  },
-  {
-    id: 4,
-    project: "infra",
-    title: "test alert 4",
-    severity: "low",
-    created_at: "2026-03-31 12:30:00",
-    events_count: 0
+const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+
+const alerts = ref([]);
+const projectsList = ref([]);
+const loading = ref(true);
+const loadError = ref(null);
+
+const projectName = ref("");
+const severityFilter = ref("");
+
+function alertsUrl() {
+  const params = new URLSearchParams();
+  if (severityFilter.value) {
+    params.set("severity", severityFilter.value);
   }
-]);
+  if (projectName.value) {
+    params.set("project_name", projectName.value);
+  }
+  const qs = params.toString();
+  return qs ? `${API_BASE}/alerts?${qs}` : `${API_BASE}/alerts`;
+}
 
-const projects = computed(() => Array.from(new Set(alerts.value.map((alert) => alert.project))).sort());
-const project = ref("");
-const severity = ref("");
+async function loadProjects() {
+  const response = await fetch(`${API_BASE}/projects`);
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+  projectsList.value = await response.json();
+}
 
-const filtered = computed(() => {
-  return alerts.value.filter((alert) => {
-    if (project.value && alert.project !== project.value) return false;
-    return !(severity.value && alert.severity !== severity.value);
+async function loadAlerts() {
+  loading.value = true;
+  try {
+    const response = await fetch(alertsUrl());
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    alerts.value = await response.json();
+    loadError.value = null;
+  } catch (err) {
+    loadError.value =
+      err instanceof Error ? err.message : "Failed to load alerts";
+    alerts.value = [];
+  } finally {
+    loading.value = false;
+  }
+}
 
-  });
+onMounted(async () => {
+  try {
+    await loadProjects();
+  } catch {
+    projectsList.value = [];
+  }
+  await loadAlerts();
 });
 
-const totalEvents = computed(() => {
-  return filtered.value.reduce((acc, alert) => acc + alert.events_count, "");
+watch([projectName, severityFilter], () => {
+  loadAlerts();
 });
+
+/** API uses snake_case events_count; coerce so reduce never sees NaN. */
+function eventCount(alert) {
+  const raw = alert?.events_count ?? alert?.eventsCount;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : 0;
+}
+
+const totalEvents = computed(() =>
+  alerts.value.reduce((acc, alert) => acc + eventCount(alert), 0)
+);
 </script>
 
 <style>
@@ -292,6 +317,16 @@ code {
 
 .muted {
   opacity: 0.9;
+}
+
+.loading,
+.error {
+  margin: 16px 0;
+  font-size: 14px;
+}
+
+.error {
+  color: #c45c4a;
 }
 </style>
 
